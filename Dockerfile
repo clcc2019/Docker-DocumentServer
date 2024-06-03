@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ubuntu:22.04
+ARG BASE_IMAGE=bitnami/minideb:latest
 
 FROM ${BASE_IMAGE} as documentserver
 LABEL maintainer Ascensio System SIA <support@onlyoffice.com>
@@ -34,32 +34,21 @@ RUN echo "#!/bin/sh\nexit 0" > /usr/sbin/policy-rc.d && \
         libxml2 \
         libxss1 \
         libxtst6 \
-        mysql-client \
-        nano \
-        net-tools \
+        default-mysql-client \
         netcat-openbsd \
         nginx-extras \
-        postgresql \
-        postgresql-client \
         pwgen \
         rabbitmq-server \
         redis-server \
         software-properties-common \
         sudo \
         supervisor \
-        ttf-mscorefonts-installer \
         xvfb \
         zlib1g && \
-    if [  $(ls -l /usr/share/fonts/truetype/msttcorefonts | wc -l) -ne 61 ]; \
-        then echo 'msttcorefonts failed to download'; exit 1; fi  && \
+
     echo "SERVER_ADDITIONAL_ERL_ARGS=\"+S 1:1\"" | tee -a /etc/rabbitmq/rabbitmq-env.conf && \
     sed -i "s/bind .*/bind 127.0.0.1/g" /etc/redis/redis.conf && \
     sed 's|\(application\/zip.*\)|\1\n    application\/wasm wasm;|' -i /etc/nginx/mime.types && \
-    pg_conftool $PG_VERSION main set listen_addresses 'localhost' && \
-    service postgresql restart && \
-    sudo -u postgres psql -c "CREATE USER $ONLYOFFICE_VALUE WITH password '$ONLYOFFICE_VALUE';" && \
-    sudo -u postgres psql -c "CREATE DATABASE $ONLYOFFICE_VALUE OWNER $ONLYOFFICE_VALUE;" && \
-    service postgresql stop && \
     service redis-server stop && \
     service rabbitmq-server stop && \
     service supervisor stop && \
@@ -71,6 +60,7 @@ COPY config/supervisor/ds/*.conf /etc/supervisor/conf.d/
 COPY run-document-server.sh /app/ds/run-document-server.sh
 
 EXPOSE 80 443
+USER 1001
 
 ARG COMPANY_NAME=onlyoffice
 ARG PRODUCT_NAME=documentserver
@@ -98,6 +88,6 @@ RUN PACKAGE_FILE="${COMPANY_NAME}-${PRODUCT_NAME}${PRODUCT_EDITION}${PACKAGE_VER
     rm -rf /var/log/$COMPANY_NAME && \
     rm -rf /var/lib/apt/lists/*
 
-VOLUME /var/log/$COMPANY_NAME /var/lib/$COMPANY_NAME /var/www/$COMPANY_NAME/Data /var/lib/postgresql /var/lib/rabbitmq /var/lib/redis /usr/share/fonts/truetype/custom
+VOLUME /var/log/$COMPANY_NAME /var/lib/$COMPANY_NAME /var/www/$COMPANY_NAME/Data /var/lib/rabbitmq /var/lib/redis /usr/share/fonts/truetype/custom
 
 ENTRYPOINT ["/app/ds/run-document-server.sh"]
