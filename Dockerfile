@@ -1,13 +1,26 @@
-ARG BASE_VERSION=22.04
+ARG BASE_VERSION=bookworm
 
-ARG BASE_IMAGE=ubuntu:$BASE_VERSION
 
+    
 FROM ${BASE_IMAGE} AS documentserver
 LABEL maintainer Ascensio System SIA <support@onlyoffice.com>
 
 ARG BASE_VERSION
-ARG PG_VERSION=14
+ARG PG_VERSION=15
+ARG BASE_IMAGE=bitnami/minideb:$BASE_VERSION
+ARG COMPANY_NAME=onlyoffice
+ARG PRODUCT_NAME=documentserver
+ARG PRODUCT_EDITION=
+ARG PACKAGE_VERSION=
+ARG TARGETARCH
+ARG PACKAGE_BASEURL="http://download.onlyoffice.com/install/documentserver/linux"
 
+ENV COMPANY_NAME=$COMPANY_NAME \
+    PRODUCT_NAME=$PRODUCT_NAME \
+    PRODUCT_EDITION=$PRODUCT_EDITION \
+    DS_PLUGIN_INSTALLATION=false \
+    DS_DOCKER_INSTALLATION=true
+    
 ENV OC_RELEASE_NUM=21
 ENV OC_RU_VER=12
 ENV OC_RU_REVISION_VER=0
@@ -22,17 +35,12 @@ ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8 DEBIAN_FRONTEND=nonint
 
 ARG ONLYOFFICE_VALUE=onlyoffice
 
-RUN echo "#!/bin/sh\nexit 0" > /usr/sbin/policy-rc.d && \
-    apt-get -y update && \
-    apt-get -yq install wget apt-transport-https gnupg locales lsb-release && \
-    wget -q -O /etc/apt/sources.list.d/mssql-release.list https://packages.microsoft.com/config/ubuntu/$BASE_VERSION/prod.list && \
-    wget -q -O - https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
-    apt-get -y update && \
-    locale-gen en_US.UTF-8 && \
+RUN echo "#!/bin/bash\nexit 0" > /usr/sbin/policy-rc.d && \
+    install_packages wget apt-transport-https gnupg locales lsb-release && \
+    echo "deb http://deb.debian.org/debian bookworm contrib non-free" > /etc/apt/sources.list.d/contrib.list && \
+    locale-gen zh_CN.UTF-8 && \
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections && \
-    ACCEPT_EULA=Y apt-get -yq install \
-        adduser \
-        apt-utils \
+    ACCEPT_EULA=Y install_packages \
         bomstrip \
         certbot \
         cron \
@@ -51,9 +59,7 @@ RUN echo "#!/bin/sh\nexit 0" > /usr/sbin/policy-rc.d && \
         libxml2 \
         libxss1 \
         libxtst6 \
-        mssql-tools18 \
         mysql-client \
-        nano \
         net-tools \
         netcat-openbsd \
         nginx-extras \
@@ -96,26 +102,13 @@ COPY config/supervisor/ds/*.conf /etc/supervisor/conf.d/
 COPY run-document-server.sh /app/ds/run-document-server.sh
 COPY oracle/sqlplus /usr/bin/sqlplus
 
+FROM documentserver
 EXPOSE 80 443
-
-ARG COMPANY_NAME=onlyoffice
-ARG PRODUCT_NAME=documentserver
-ARG PRODUCT_EDITION=
-ARG PACKAGE_VERSION=
-ARG TARGETARCH
-ARG PACKAGE_BASEURL="http://download.onlyoffice.com/install/documentserver/linux"
-
-ENV COMPANY_NAME=$COMPANY_NAME \
-    PRODUCT_NAME=$PRODUCT_NAME \
-    PRODUCT_EDITION=$PRODUCT_EDITION \
-    DS_PLUGIN_INSTALLATION=false \
-    DS_DOCKER_INSTALLATION=true
 
 RUN PACKAGE_FILE="${COMPANY_NAME}-${PRODUCT_NAME}${PRODUCT_EDITION}${PACKAGE_VERSION:+_$PACKAGE_VERSION}_${TARGETARCH:-$(dpkg --print-architecture)}.deb" && \
     wget -q -P /tmp "$PACKAGE_BASEURL/$PACKAGE_FILE" && \
-    apt-get -y update && \
     service postgresql start && \
-    apt-get -yq install /tmp/$PACKAGE_FILE && \
+    dpkg -i /tmp/$PACKAGE_FILE || apt-get install -yq && \
     service postgresql stop && \
     chmod 755 /etc/init.d/supervisor && \
     sed "s/COMPANY_NAME/${COMPANY_NAME}/g" -i /etc/supervisor/conf.d/*.conf && \
